@@ -1,0 +1,209 @@
+---
+title: "Logistic reg"
+output: html_document
+author: Umay YENTUR
+email: umay.yentur@hotmail.com yada umay.yentur@gmail.com
+---
+Sınıflama ve atama işlemi yapmaya yardımcı olan bir regresyon yöntemidir.
+Bağımlı değişken nitel olduğu durumda logistic reg. yapılır.
+
+Lojistik Regresyon Modelinin temeli üstünlük oranına (Odds ratio) dayanır.Yani Üstünlük Oranı (Odds Ratio), bir olayın gerçekleşme olasılığı ile gerçekleşmeme olasılığını karşılaştırır.
+
+Gerekli paketler:
+```{r}
+library(knitr)
+library(kableExtra)
+library(cli)
+library(tidyverse)   
+library(modelr)      
+library(broom)       
+library(ISLR)        
+library(pscl)
+```
+
+
+Veri inceleme ve hazırlama::
+
+```{r}
+default <- as_tibble(ISLR::Default)
+View(default)
+```
+
+Veri organizasyonu
+
+```{r}
+set.seed(123)
+sample <- sample(c(TRUE, FALSE), nrow(default), replace = T, prob = c(0.6,0.4))
+train <- default[sample, ]
+test <- default[!sample, ]
+```
+
+```{r}
+model1 <- glm(default ~ balance, family = "binomial", data = train)
+model1
+```
+
+
+```{r}
+default %>%
+  mutate(prob = ifelse(default == "Yes", 1, 0)) %>%
+  ggplot(aes(balance, prob)) +geom_point(alpha = .15) +geom_smooth(method = "glm"
+  , method.args = list(family = "binomial")) + ggtitle("Lojistik regresyon model uyumu")          +xlab("Balance") + ylab("Temerrüd Olasılığı")
+```
+
+```{r}
+summary(model1)
+```
+
+```{r}
+tidy(model1)
+```
+
+```{r}
+exp(coef(model1))
+```
+
+```{r}
+confint(model1)
+```
+
+Tahminler elde edilmesi:
+
+```{r}
+predict(model1, data.frame(balance = c(1000, 2000)), type = "response")
+```
+
+default ~student olarak değiştirildi.
+```{r}
+model2 <- glm(default ~ student, family = "binomial", data = train)
+summary(model2)
+tidy(model2)
+```
+
+```{r}
+predict(model2, data.frame(student = factor(c("Yes", "No"))), type = "response")
+```
+
+
+Çoklu Logistic Reg:
+
+```{r}
+model3 <- glm(default ~ balance + income + student, family = "binomial", data = train)
+tidy(model3)
+summary(model3)
+```
+
+
+```{r}
+exp(coef(model3))
+caret::varImp(model3)
+```
+
+
+```{r}
+new.df <- tibble(balance = 1500, income = 40, student = c("Yes", "No"))
+predict(model3, new.df, type = "response")
+```
+
+
+Model değerlendirme ve Tanılama ::
+
+Olabilirlik oran testi(likehood ratio test)
+
+```{r}
+Anova <- anova(model1, model3, test = "Chisq")
+Anova
+tidy(Anova)
+```
+
+
+Pseud R^2 
+
+```{r}
+list(model1 = pscl::pR2(model1)["McFadden"],model2 = pscl::pR2(model2)["McFadden"],
+     model3 = pscl::pR2(model3)["McFadden"])
+```
+
+
+Artıkların incelenmesi :
+
+```{r}
+model1_data <- augment(model1) %>% mutate(index = 1:n())
+
+ggplot(model1_data, aes(index, .std.resid, color = default)) + geom_point(alpha = .5) +geom_ref_line(h = 3)
+```
+
+
+```{r}
+model1_data %>% filter(abs(.std.resid) > 3)
+```
+
+
+```{r}
+plot(model1, which = 4, id.n = 5)
+```
+
+```{r}
+model1_data %>% top_n(5, .cooksd)
+```
+
+
+Öngörülen Değerlerin Doğrulanması (Validation of Predicted Values):
+
+
+```{r}
+test.predicted.m1 <- predict(model1, newdata = test, type = "response")
+test.predicted.m2 <- predict(model2, newdata = test, type = "response")
+test.predicted.m3 <- predict(model3, newdata = test, type = "response")
+```
+
+```{r}
+ list(model1 = table(test$default, test.predicted.m1 > 0.5) %>% prop.table() %>% round(3),
+  model2 = table(test$default, test.predicted.m2 > 0.5) %>% prop.table() %>% round(3),
+  model3 = table(test$default, test.predicted.m3 > 0.5) %>% prop.table() %>% round(3)
+)
+```
+
+
+
+```{r}
+ test %>% mutate(m1.pred = ifelse(test.predicted.m1 > 0.5, "Yes", "No"),
+m2.pred = ifelse(test.predicted.m2 > 0.5, "Yes", "No"), m3.pred = ifelse(test.predicted.m3 > 0.5, "Yes", "No")) %>%
+summarise(m1.error = mean(default != m1.pred),m2.error = mean(default != m2.pred),m3.error = mean(default != m3.pred))
+```
+
+```{r}
+table(test$default, test.predicted.m1 > 0.5)
+```
+
+
+
+ROC Eğrisi (Receiving Operating Characteristic):
+
+```{r}
+library(ROCR)
+
+par(mfrow=c(1, 2))
+
+prediction(test.predicted.m1, test$default) %>%
+  performance(measure = "tpr", x.measure = "fpr") %>%
+  plot()
+
+prediction(test.predicted.m2, test$default) %>%
+  performance(measure = "tpr", x.measure = "fpr") %>%
+  plot()
+```
+
+MODEL1
+```{r}
+prediction(test.predicted.m1, test$default) %>%performance(measure = "auc") %>%.@y.values
+```
+MODEL2
+```{r}
+prediction(test.predicted.m2, test$default) %>%
+  performance(measure = "auc") %>%
+  .@y.values
+```
+
+
+

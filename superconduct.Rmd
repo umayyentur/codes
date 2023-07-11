@@ -1,0 +1,549 @@
+---
+title: "Superconduct datasının incelenmesi"
+output: html_document
+email: umay.yentur@hotmail.com yada umay.yentur@gmail.com
+author: Umay YENTUR
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Gerekli paketler:
+```{r}
+library(ggplot2)
+library(dplyr)
+library(broom)
+library(ggpubr)
+library(ISLR)
+```
+
+Yapmak istediğim model:Bir atomun kritik sıcaklığının ağırlığına hacmine kütlesine entropi si gibi değişkenlerle test etmek istiyorum. Bununla ilgili kullancağım veri:
+
+```{r pressure, echo=FALSE}
+library(readxl)
+Data = read_xlsx("Documents/superconduct.xlsx")
+```
+Verimizde kayıp gözlem (NA) değerlinin olup olmadığını inceleyerek başlıyorum.
+
+
+```{r}
+colSums(is.na(Data))
+```
+Bu komut sayesinde hangi sütunda kaç tane NA değişkeni var onu görüyoruz.
+
+
+
+Kullandığım verinin değişken sayısı çok fazla olduğu için işlemleri yapmam programı aşırı yavaşlattığı ve programın birkaç kez çökmesine sebep oldu.Bazı komutları veri büyük olduğu için kullanamadım(mice çok yavaş yeni veri ekleyebiliyordu yada md.pattern verim çok büyük olduğu için çalışmıyordu vb.) bu sebepten değişkenlerin bir kısmını çıkartmak zorunda kaldım.
+```{r}
+d1 = Data[c("critical_temp","std_Valence","wtd_range_ThermalConductivity","std_ThermalConductivity","entropy_Valence","wtd_entropy_ThermalConductivity","entropy_ThermalConductivity","wtd_gmean_ThermalConductivity","std_FusionHeat","wtd_std_ElectronAffinity","std_fie")]
+```
+
+```{r}
+cor(na.omit(d1))
+```
+korelasyon matrisi incelendiğinde bağımsız değişkenimiz için(critical_temp) çoğunlukla pozitif bir ilişki olduğunu söyleyebiliriz. Bazı değişkenlerimizde kendi aralarında ilişkşisi olduğu görülmektedir.
+
+
+
+
+Kayıp Gözlemler:
+```{r}
+library(mice)
+md.pattern(d1)
+```
+Sonuçlar incelendiğinde 21159 gözlemden 114 tanesinin NA yani kayıp gözlem olduğu görülmektedir.Bu verideki gözlem sayımızla NA değerleri arasında çok büyük bir fark olduğu için direkt NA değerlerini çıkarmak daha uygun gibi gçrünüyor ama test için Hem NA değererini dolduracağım hemde çıkartıp aralarındaki farkı kıyaslamasını yapıyorum.
+
+
+İlk olaraka NA değerlerini doldurmak için:
+
+```{r}
+girdi = mice(data = d1, m = 5)
+names(girdi)
+girdi$imp
+```
+
+
+```{r}
+Data_imp = complete(girdi,2)
+md.pattern(Data_imp)
+```
+
+Model Oluşturma:
+
+Na olan değerlerimizin doldurulduğunu gördük şimdi verimizin %80 ile bir deneme testi kurgulayacağım.Bu veride deneme setimizi verinin %80i olarak kullanıyorum.
+
+```{r}
+set.seed(135)
+sampleindex = sample(1:nrow(Data_imp) , size = 0.8*nrow(Data_imp))
+trainset = Data[sampleindex,]
+testset = Data[-sampleindex,]
+```
+
+
+```{r}
+model = lm(critical_temp~std_Valence+wtd_range_ThermalConductivity+std_ThermalConductivity+entropy_Valence+wtd_entropy_ThermalConductivity+entropy_ThermalConductivity+wtd_gmean_ThermalConductivity+std_FusionHeat+wtd_std_ElectronAffinity+std_fie, data = trainset)
+```
+
+```{r}
+summary(model)
+```
+
+Sonuçlar incelendiğinde model anlamlı çıkmıştır.Değişkenlerde anlamlı görülmektedir.
+
+modelimizde ilerlemeden önce Na değerlerini çıkarsaydık durumda bir farklılık olup olmadığına bakacağım
+
+```{r}
+modelNA = lm(critical_temp~std_Valence+wtd_range_ThermalConductivity+std_ThermalConductivity+entropy_Valence+wtd_entropy_ThermalConductivity+entropy_ThermalConductivity+wtd_gmean_ThermalConductivity+std_FusionHeat+wtd_std_ElectronAffinity+std_fie,trainset ,na.action = na.omit)
+summary(modelNA)
+```
+
+Verimiz büyük ve NA değerlerimiz az olduğu için neredeyse hiç etkilenmiyor. Tercih olarak Na ları dolduruğumz modelle iyi gibi fakat en iyi modeli bulmak için
+
+En İyi Modeli Bulma:(stepwise)
+
+```{r}
+library(olsrr)
+m = lm(critical_temp~., data = d1)
+k = ols_step_all_possible(m)
+```
+Bu işlem sayesinden bana bütün modelleri gösterecek 
+En iyi modeli bulmak içnse minimum cp ve maksimin R^2adj değerine bakmak uygun olacaktır.
+
+```{r}
+k[which.max(k$adjr),]
+k[which.min(k$cp),]
+```
+2 gözlem içinde 1023. sonuç en iyisidir şimdi yeni modeli koyup devam edeceğim.
+
+```{r}
+modelbest = lm(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity +entropy_Valence+ wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie, data = trainset)
+```
+
+```{r}
+summary(modelbest)
+```
+
+
+
+
+
+```{r}
+plot(modelbest)
+```
+
+İlk grafiğe bakılınca genişleyen bir yapıda olduğu görülmektedir.
+ikince grafiğe bakılınca normal dağıldığı (çizginin üstünde olduğu) görüşlmektedir.Bazı aykırı değerler olduğu da görülmektedir.
+üçüncü grafik ilginç bir V şeklini almış 
+dördüncü grafik için artıkların benzer bir etkiye sahip olduğu görülmekle birlite Cooks distance çizgilerine bakıldığında net bir artık olmadığı görülmektedir.
+
+
+
+
+```{r}
+library(olsrr)
+ols_test_normality(modelbest$residuals)
+```
+Verimiz 3-5000 arasında olmadığı için bu testi uygulayamadık.
+
+
+Değişken varyansın tespiti:(Breusch-Pagan test)
+
+```{r}
+library(lmtest)
+bptest(modelbest)
+```
+Teste göre p değerimiz 0.5 ten küçük olduğu için H0 hipotezini reddederiz.
+
+Modelle uyumsuz herhangi bir verimiz olamdığı için test setinden herhangi bir değişken çıkartmıyorum.
+
+Bir tahmin yapmak istersek:
+
+```{r}
+predictions = predict(modelbest,testset)
+head(predictions)
+```
+
+modelimizden elde edilen tahminler bu şekildedir.
+
+Metriclere bakıcak olursak:
+
+```{r}
+library(caret)
+R2(predictions, testset$critical_temp , na.rm = T)
+RMSE(predictions, testset$critical_temp , na.rm = TRUE)
+MAE(predictions, testset$critical_temp , na.rm = TRUE)
+
+```
+Ana verimizde NA değerleri olduğu için (na.rm) yazdık diğer türlü verimiz NA olarak gözüküyordu.
+rmse,mae biraz yüksek o yüzden modelimiz iyi bir modeldir diyemeyiz.
+
+
+Akyırı Değer Kontrolü:
+
+```{r}
+dist= cooks.distance(modelbest)
+olcut1<-mean(dist)*3
+olcut2 <-4/length(dist)
+olcut1;olcut2
+```
+cook distance değerleri genelde küçük olduğundan olcut1 kullanımı daha uygun olacaktır.Geneden kontrol amaçlı her iki değişken için işlem yaparsak.
+
+
+```{r}
+olcut1Index <-which(dist>olcut1)
+olcut2Index <-which(dist>olcut2)
+length(olcut1Index)
+length(olcut2Index)
+```
+olcut1 e göre 967 adet aykırı değer vardır.
+Bunu grafik üzerinde görmek istersek
+
+```{r}
+plot(1:length(dist), dist, type="p", ylim = range(dist)*c(1,0000000000000001))
+```
+
+Verimiz detaylı incelemeye çakışınca da değer aralıklarının yakın olduğu görülmektedir.
+
+Şimdi verimizin geneliden uzakta olan değerleri trainset içerisinden çıkarırsak.
+```{r}
+trainsetrem = trainset[-olcut1Index,]
+nrow(trainsetrem)
+nrow(trainset)
+```
+Yaklaşık 1000 değer çıkarıldı şimdi buna göre yeni model oluşturalım
+
+```{r}
+model2 = lm(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity +entropy_Valence+ wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie, data = trainsetrem)
+
+```
+
+modelleri karşılaştırırsak
+```{r}
+summary(modelbest)
+summary(model2)
+```
+
+Max-Min değerlerinde bir değişim olmamış, $Residual Standart Error$ düştüğünü ve adjR^2 değerinde de model2 nin biraz arttığı görülüyor.
+
+```{r}
+plot(model2)
+bptest(model2)
+```
+
+
+Başka testler uyguluyarak hangi modelin daha iyi olduğuna karar verilecektir.
+
+```{r}
+AIC(modelbest, k = 12)
+AIC(model2, k = 12)
+BIC(modelbest)
+BIC(model2)
+```
+AIC ve BIC değerlerine bakıldığında model2 nin daha iyi bir sonuç verdiğini söyleyebiliriz.
+Yeni modele göre değerlendirirsek 
+```{r}
+predictions2 = predict(model2, testset)
+MAE(predictions2 , testset$critical_temp , na.rm = T)
+RMSE(predictions2, testset$critical_temp , na.rm = T)
+R2(predictions2, testset$critical_temp , na.rm = T)
+```
+Metriclerde büyük bir değişim görülmemektedir.
+
+Aykırı değerler hala mevcuttur belli bir kısmını daha çıkarıp daha iyi bir sonuç almaya bakacağım
+
+```{r}
+dist2= cooks.distance(model2)
+olcut12<-mean(dist2)*3
+olcut22 <-4/length(dist2)
+olcut12;olcut22
+```
+olcut1 çok daha iyi 
+
+```{r}
+olcut1Index2 <-which(dist2>olcut12)
+trainsetrem2 = trainsetrem[-olcut1Index2,]
+nrow(trainsetrem)
+nrow(trainsetrem2)
+```
+
+
+```{r}
+model3 = lm(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity +entropy_Valence+ wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie,data = trainsetrem2)
+```
+
+```{r}
+summary(model3)
+summary(model2)
+```
+
+```{r}
+plot(model3)
+```
+Verimiz azalmasına rağmen grafikten görülebileceği gibi hala artık değerlerimiz mevcuttur bu işlemi bir kaç kere daha takip edip son modele göre test ediceğim.
+Bu işlemi arka planda 8 kere tekrar ettim ve verimizin daha kötüye gitti.
+Başka bir yöntem kullanacağım
+
+```{r}
+artık = as.numeric(model2$residuals)
+artık
+```
+Bu işlemide bir kaç kere deneyip en uygun sonuca bakılacak.
+
+```{r}
+my = Data_imp[c("critical_temp","std_Valence","wtd_range_ThermalConductivity","std_ThermalConductivity", "entropy_Valence","wtd_entropy_ThermalConductivity","entropy_ThermalConductivity","wtd_gmean_ThermalConductivity","std_FusionHeat","wtd_std_ElectronAffinity","std_fie")]
+
+m1.center =colMeans(my)
+m1.cov = cov(my)
+distance = mahalanobis(my, center= m1.center , cov = m1.cov)
+cutoff = qchisq(p =0.95 ,df = 11) 
+index = which(distance > cutoff)
+```
+
+
+```{r}
+my.new = my[-index,]
+model4 = lm(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity +entropy_Valence+ wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie,data = my.new)
+```
+
+```{r}
+summary(model4)
+```
+
+
+```{r}
+m2.center =colMeans(my.new)
+m2.cov = cov(my.new)
+distance2 = mahalanobis(my.new, center= m2.center , cov = m2.cov)
+cutoff2 = qchisq(p =0.95 ,df = 11) 
+index2 = which(distance2 > cutoff2)
+my2.new = my.new[-index2,]
+```
+
+```{r}
+model5 = lm(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity +entropy_Valence+ wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie,data = my2.new)
+```
+
+```{r}
+summary(model5)
+```
+
+
+```{r}
+m3.center =colMeans(my2.new)
+m3.cov = cov(my2.new)
+distance3 = mahalanobis(my2.new, center= m3.center , cov = m3.cov)
+cutoff3 = qchisq(p =0.95 ,df = 11) 
+index3 = which(distance3 > cutoff3)
+my3.new = my2.new[-index3,]
+```
+
+```{r}
+model6 = lm(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity +entropy_Valence+ wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie,data = my3.new)
+```
+
+```{r}
+summary(model6)
+summary(model5)
+BIC(model5)
+BIC(model6)
+```
+R^2 açısından model5 dahah iyi gibi görünsede BIC ve max-min değerleri için model5 daha iyi 
+
+```{r}
+plot(model5)
+```
+Grafik 2 de görüldüğü üzere artıklar azalmış ve çoğu değer çizginin üzerindedir bir kaç kez daha artık çıkartıp daha iyi bir model bulmayı deneyeceğim.
+
+```{r}
+m4.center =colMeans(my3.new)
+m4.cov = cov(my3.new)
+distance4 = mahalanobis(my3.new, center= m4.center , cov = m4.cov)
+cutoff4 = qchisq(p =0.95 ,df = 11) 
+index4 = which(distance4 > cutoff4)
+my4.new = my3.new[-index4,]
+```
+
+```{r}
+model7 = lm(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity +entropy_Valence+ wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie,data = my4.new)
+```
+
+Şuana kadar yapılan modelleri kıyaslarsak:
+```{r}
+summary(model3)
+summary(model5)
+summary(model7)
+AIC(model7, k = 12)
+AIC(model5, k = 12)
+AIC(model3, k = 12)
+BIC(model7)
+BIC(model5)
+BIC(model3)
+```
+model7 nin bizim için en iyi sonuç olduğuna kararlaştırdım (daha işleme tekrar edilince modelimizin değerlerinde bozulmalar meydana geliyor.)
+
+
+```{r}
+predictions3 = predict(model7, testset)
+MAE(predictions3 , testset$critical_temp , na.rm = T)
+RMSE(predictions3, testset$critical_temp , na.rm = T)
+R2(predictions3, testset$critical_temp , na.rm = T)
+predictions2 = predict(model2, testset)
+MAE(predictions2 , testest$critical_temp , na.rm = T)
+RMSE(predictions2, testset$critical_temp , na.rm = T)
+R2(predictions2, testset$critical_temp , na.rm = T)
+```
+Sonuçlara göre , model7, model2 ye göre belirgin bir farklılık görülmektedir. Model7 daha iyi performans vermektedir.
+
+
+
+Çoklu bağlantı sorunu olup olmadığına bakıyorum
+```{r}
+library(car)
+vif(model7)
+```
+Çoklu bağlantı sorunu gözlemlendi. Bu değerleri çıkartıp tekrar gözden geçireceğim
+
+
+```{r}
+model7vif = lm(critical_temp~std_Valence+ wtd_range_ThermalConductivity + wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie,  data = my4.new)
+vif(model7vif)
+```
+Çoklu regresyon problemi giderildi. şimdi modelleri inceleyelim.
+
+```{r}
+summary(model7vif)
+summary(model7)
+```
+Çoklu regresyon sorunu kaldırılmış olan verimizde. R^2 sinde minik bir azalma meydana geldi .R.standad error de de minik bir artık ver şimdi de bir değişkenin çıkarılmış olan haline bakacağım.
+
+
+```{r}
+model7vif_2 = lm(critical_temp~std_Valence+ wtd_range_ThermalConductivity +entropy_Valence+ wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie,  data = my4.new)
+vif(model7vif_2)
+```
+Herhangi bir çoklu bağlantı sorunu oluşmadı.
+
+```{r}
+summary(model7)
+summary(model7vif_2)
+```
+Max-Min de ekstrem bir değişim söz konusu değil diğer yandan R^2 ve hata oranında da model7vif e benzemektedir son olarakta diğer verinin çıkarılmasıyla incelersek
+
+
+```{r}
+model7vif_3 =  lm(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity + wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie,data = my4.new)
+vif(model7vif_3)
+```
+Herhangi bir çoklu bağlantı sorunu oluşmadı.
+
+```{r}
+summary(model7)
+summary(model7vif_3)
+```
+Gene benzer bir sonuç verdi daha sağlıklı bir sonuç için verileri testsetimizde tahmin edip en uygun olan sonucu değerlendiricez.
+
+Test Seti üzerinde model değerlendirme
+
+```{r}
+predictionsvif2 = predict(model7vif_2 , testset)
+R2(predictionsvif2, testset$critical_temp, na.rm = T)
+RMSE(predictionsvif2, testset$critical_temp, na.rm = T)
+MAE(predictionsvif2, testset$critical_temp, na.rm = T)
+```
+
+
+```{r}
+predictionsvif3 = predict(model7vif_3 , testset)
+R2(predictionsvif3, testset$critical_temp, na.rm = T)
+RMSE(predictionsvif3, testset$critical_temp, na.rm = T)
+MAE(predictionsvif3, testset$critical_temp, na.rm = T)
+```
+
+model7vif_3 ün daha iyi performans verdiği görülmektedir. 
+
+İlişki Hataları:
+
+```{r}
+n = length(residuals(model7vif_3))
+plot(tail(residuals(model7vif_3),n-1)~head(residuals(model7vif_3),n-1) ,xlab = expression(hat(epsilon)[i]) , ylab=expression(hat(epsilon)[i+1]))
+abline(h=0,v=0,col= grey(0.75))
+```
+Bu grafiğe bakacak olursak otokolerasyon sorunu olduğu görülmektedir. Şimdi regresyon modeli kurulup teyit edeceğim.
+
+```{r}
+summary(lm(tail(residuals(model7vif_3),n-1)~head(residuals(model7vif_3),n-1)-1))
+```
+
+Görüldüğü üzer bu model anlamlı olduğu yani iki tip veri arasında doğrusal ilişki söz konusudur.Başka bir sağlamada şöyledir
+
+```{r}
+lmtest::bgtest(model7vif_3, order = 2)
+```
+
+
+```{r}
+library(lmtest)
+bptest(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity + wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie,data = my4.new)
+```
+
+
+
+```{r}
+resid = residuals(model7vif_3)
+kresid = resid^2
+pred = predict(model7vif_3)
+pairs(~kresid+resid+std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity + wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie+pred , data = my4.new)
+```
+Artıkların saçılım grafiği parabole benzemektedir. Bu yüzden açıklayıcı değişken regresyonu modeli kuruyoruz.
+
+```{r}
+mod = lm(abs(resid)~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity + wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie, data = my4.new)
+w = 1/predict(mod)^2
+weightmodel = lm(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity + wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie , data = my4.new , weights = w)
+summary(weightmodel)
+```
+
+Saçılım grafiğine bakıcak olursak  
+
+```{r}
+weigtedresid = diag(sqrt(w))%*%residuals(weightmodel)
+par(mfrow = c(1,2))
+plot(my4.new$critical_temp, resid)
+plot(my4.new$critical_temp , diag(sqrt(w))%*%weigtedresid)
+```
+
+Şimdi tekrar breush paga testi yaparsak
+
+```{r}
+bpmod = lm((weigtedresid)^2~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity + wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie, data = my4.new)
+summary(bpmod)
+```
+
+
+```{r}
+require(lmtest)
+bptest(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity + wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie,weight = w ,data = my4.new)
+```
+Değişen varyans sorunu ortadan kalkmıştır.
+
+
+
+Bunun dışında başka bir test daha yaparsak(Durbin-Watson testi) 
+
+```{r}
+require(lmtest)
+dwtest(critical_temp~std_Valence+ wtd_range_ThermalConductivity+ std_ThermalConductivity + wtd_entropy_ThermalConductivity +entropy_ThermalConductivity+ wtd_gmean_ThermalConductivity +std_FusionHeat +wtd_std_ElectronAffinity +std_fie ,data = my4.new)
+```
+Hipotez reddedilemedi. Yani hatalar arasında korelasyon yoktur.H0 hipotezi hataları arasında korelasyon yoktur.
+
+
+
+
+
+
+
+
+
+

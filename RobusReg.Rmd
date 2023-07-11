@@ -1,0 +1,688 @@
+---
+title: "RobusRegresion"
+output: html_document
+author: Umay yentur
+email: umay.yentur@hotmail.com yada umay.yentur@gmail.com
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Sağlam regresyon, veriler aykırı değerlerle veya etkili gözlemlerle kontamine olduğunda en küçük kareler regresyonuna bir alternatiftir ve ayrıca etkili gözlemleri tespit etmek amacıyla da kullanılabilir.
+
+
+## Örnek verilerin açıklaması
+Aşağıdaki veri analizimiz için Alan Agresti ve Barbara Finlay tarafından yayınlanan Sosyal Bilimler için İstatistiksel Yöntemler, Üçüncü Baskı'da yer alan suç veri kümesini kullanacağız (Prentice Hall, 1997). Değişkenler eyalet kimliği (sid), eyalet adı (state), 100.000 kişi başına şiddet suçları (crime), 1.000.000 kişi başına cinayet (murder), metropol alanlarda yaşayan nüfusun yüzdesi (pctmetro), nüfusun yüzdesi beyaz (pctwhite), lise veya üzeri eğitim almış nüfusun yüzdesi (pcths), yoksulluk sınırı altında yaşayan nüfusun yüzdesi (poverty) ve tek ebeveynli (single) nüfusun yüzdesidir. 51 gözlemi var. Suçu tahmin etmek için poverty ve single değişkenlerini kullanacağız.
+
+```{r}
+set.seed(300)
+library(foreign)
+cdata <- read.dta("https://stats.idre.ucla.edu/stat/data/crime.dta")
+summary(cdata)
+head(cdata)
+```
+
+
+##Sağlam regresyon analizi kullanma
+
+Bir OLS regresyonu yürüterek ve kalıntıları inceleyerek başlarız.
+
+```{r,warning=FALSE,message=FALSE}
+summary(ols <- lm(crime ~ poverty + single, data = cdata))
+```
+
+```{r,warning=FALSE,message=FALSE}
+library(faraway)
+plot(ols)
+```
+
+İlk grafik Y psakların artıklarla olan bir grafiktir(değişken varyans bakılır[huni vs var mı diye]kırmız çizgi 0 a ne kadar yakınsa değişken varyans problemi azalır(yoktur))
+
+2.grafik qq grafiğidir(25,51,9) olmasa artıkların normal gözüktüğü söylenebilir)
+
+3.grafik değişken varyans için kullanılır.(İlk saçılım grafiğinden bir şey anlaşılmadığı durumlarda genelde bakılır)Lineer trend varmı ona bakılır(51 kaynaktır vardır.)
+
+4.grafik kesik kesik çizgilerin dışına çıkan gözlemler leveraglarımız(kaldıraç)
+
+
+
+
+Cook distance değeri 2p/n den büyük olan gözlemleri ve bunlara karşılık gelen standartlaştırılmış artıkları inceleyelim.
+
+
+Cook distance
+```{r,warning=FALSE,message=FALSE}
+library(MASS)
+d1 <- cooks.distance(ols)
+p = sum(hatvalues(ols))
+n = nrow(cdata)
+cutpoint = qf(0.5,p,n-p)
+a <- cbind(cdata, d1)
+a[d1 > cutpoint, ]
+```
+51. gozlem etkili gözlem olarak bulundu.
+
+
+Şimdi artıklara bakacağız. Artıkların mutlak değeri olan rabs adında yeni bir değişken üreteceğiz (çünkü artık işareti önemli değil). Daha sonra en yüksek mutlak artık değeri olan ilk 10 gözleme bakacağız.
+
+```{r,warning=FALSE,message=FALSE}
+library(olsrr)
+ols_test_outlier(ols, cut_off = 0.05)
+```
+25 outlier çıktı
+
+
+Df beta fitt:
+```{r}
+cutdffit = 2*sqrt(p/n)
+halfnorm(dffits(ols) , ylab = "dffit values",4)
+abline(h=cutdffit)
+```
+51,25,9 ucundanda 1 
+
+
+
+Leverage:
+```{r}
+cut = 2*p/n
+halfnorm(hatvalues(ols) , ylab = "hat values",4)
+abline(h=cut)
+```
+
+
+Şimdi ilk sağlam regresyonumuzu gerçekleştirelim. Sağlam regresyon iteratif yeniden ağırlıklı en küçük kareler (IRLS) ile yapılır. Sağlam regresyon çalıştırma komutu MASS paketinde rlm'dir. IRLS için kullanılabilecek çeşitli ağırlık fonksiyonları vardır. Bu örnekte önce Huber ağırlıklarını kullanacağız. Datha sonra IRLS işlemi tarafından yaratılan son ağırlıklara bakacağız. 
+
+defualt ı psi = hubber
+```{r,warning=FALSE,message=FALSE}
+summary(rr.huber <- rlm(crime ~ poverty + single, data = cdata))
+```
+
+
+
+```{r,warning=FALSE,message=FALSE}
+hubberweights <- data.frame(state = cdata$state, resid = rr.huber$resid, weight = rr.huber$w)
+hubberweights2 <- hubberweights[order(rr.huber$w), ]
+hubberweights2[1:15, ]
+```
+bu değerler potanisyel aykırı gözlemlerdir.(en aykırı 25. deger çıktı)
+
+
+Kabaca, mutlak artık azaldıkça, ağırlığın arttığını görebiliriz. Başka bir deyişle, büyük kalıntıları olan vakalar düşük ağırlıklı olma eğilimindedir. Bu çıktı bize Mississippi gözleminin en düşük ağırlıklı olacağını gösteriyor. Florida da önemli ölçüde düşük ağırlıklı olacak. Yukarıda gösterilmeyen tüm gözlemler 1 ağırlığa sahiptir. OLS regresyonunda, tüm vakalar 1 ağırlığa sahiptir. Bu nedenle, sağlam regresyonda birine yakın ağırlığa sahip vakalar ne kadar fazla olursa, OLS ve sağlam regresyonların sonuçları o kadar yakın olur. 
+
+Şimdi de bisquare ağırlıklandırmasını kullanarak regresyon modelimizi kuralım.
+
+```{r,warning=FALSE,message=FALSE}
+rr.bisquare <- rlm(crime ~ poverty + single, data=cdata, psi = psi.bisquare)
+summary(rr.bisquare)
+```
+
+
+
+Tekrar ağırlıklara bakalım.(bisquare e göre)
+
+```{r,warning=FALSE,message=FALSE}
+biweights <- data.frame(state = cdata$state, resid = rr.bisquare$resid, weight = rr.bisquare$w)
+biweights2 <- biweights[order(rr.bisquare$w), ]
+biweights2[1:15, ]
+```
+
+İki modelin residual standart error'lerine bakıldığı zaman Huber yöntemi daha küçük residual standart error değerine sahiptir.
+
+
+    #aykırı değerlerin tespiti için robus daha iyi bir yaklaşımdır
+    
+    
+    
+    
+    
+    ORNEK:
+
+
+AYKIRI GÖZLEM PROBLEMİ
+
+```{r,message=FALSE,warning=FALSE,echo=FALSE}
+library(mlbench)
+library(dplyr)
+data(BostonHousing2)
+Bostonhousing<- BostonHousing2 %>% dplyr::select(-c("town","cmedv","chas","lon"))
+```
+
+
+
+### BostonHousing Veri Setinin Tanıtılması
+```{r,message=FALSE,warning=FALSE,echo=FALSE}
+head(Bostonhousing,10)
+summary(Bostonhousing)
+```
+
+### Lineer Regresyon Modeli
+```{r,message=FALSE,warning=FALSE}
+lsmod<-lm(medv ~ . , data = Bostonhousing)
+summary(lsmod)
+```
+### 1.Normallik Varsayımı
+
+
+```{r,message=FALSE,warning=FALSE}
+n = nrow(Bostonhousing)
+library(olsrr)
+ols_test_normality(lsmod)
+library(faraway)
+plot(lsmod)
+```
+Kolmogrov-Smirnov a bakılmalı(hatalar normal dağılmıyor)
+
+
+
+
+### QQ Plot(Üstekki grafik gayet yeterli)
+```{r,message=FALSE,warning=FALSE}
+par(mfrow=c(1,3)) 
+x <-residuals(lsmod)
+
+## Histogram Cizme
+myhist <-hist(x, breaks=10, density=10,col="darkgrey",xlab="Residuals", main="Histogram") 
+abline(v=mean(x), col="darkgreen", lwd=2)
+
+# Yogunluk egrisi cizme
+multiplier <- myhist$counts / myhist$density 
+mydensity <- density(x) 
+mydensity$y <- mydensity$y * multiplier[1]
+lines(mydensity, col="blue", lwd=2)
+
+# Normal e?risisin ayni ortalama ve standars sapma ile cizilmesi
+xfit <- seq (min(x), max(x), length=40)
+yfit <- dnorm(xfit, mean =mean(x), sd = sd(x))
+
+yfit <- yfit *diff(myhist$mids[1:2]) *length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+##qq plot 
+qqnorm(residuals(lsmod),ylab="residuals",main="QQPLOT",col="blue")
+qqline(residuals(lsmod))
+
+##density
+d <- density(x)
+plot(d,main = "")
+polygon(d, col="red", border="blue") 
+par(mfrow=c(1,1))
+```
+Normalik varsayımı sağlanmıyor.
+
+
+
+
+### Breush-Pagan Testi:
+
+```{r,message=FALSE,warning=FALSE}
+library(lmtest)
+bptest(lsmod)
+```
+Değişken varyans porblemi var.
+
+
+### OUTLIERS
+(grafikli hali)
+```{r,message=FALSE,warning=FALSE}
+library(faraway)
+stud <- rstudent(lsmod)
+n<-nrow(Bostonhousing)
+p<-sum(hatvalues(lsmod))
+cut<-qt(0.05/(2*n),n-p-1)
+which(abs(stud)>abs(cut))
+halfnorm(stud,4)
+abline(h=abs(cut))
+```
+Bu islem yapmandan fakrlı bir yolla yapacak olursak
+
+
+#### Diğer outlier değerler:(bu daha kolay )
+```{r,message=FALSE,warning=FALSE}
+library(car)
+outlierTest(lsmod)
+```
+Varsayımlarımız sağlanmadı(369,373,372,370 outlier)
+
+
+
+
+RobusRegresyonu(aykırı değer varsa genelde yapılır birçok farkı sorunlarıda çözebilir)
+
+
+
+### Robust regresyon modelinin Kurulması(hubber)
+
+
+
+hubberdi vs di tek tek denemek yerine topluda bakılıp karar verilebilir.
+```{r,warning=FALSE}
+library(caret)
+ctrl<-trainControl(method='cv', number=10)
+X<-model.matrix(lsmod)[,-1]
+y<-Bostonhousing$medv
+cv.lm<-train(X, y,method='rlm',trControl=ctrl)
+print(cv.lm)
+```
+nointerceptmodel = rlm(prestige~0+., data= )
+
+```{r,message=FALSE,warning=FALSE}
+library(MASS)
+#robust regresyon yapalım
+rlmod=rlm(medv ~ . , data = Bostonhousing)
+summary(rlmod)
+```
+
+
+### Hubber e göre OUTLIERS
+
+```{r,message=FALSE,warning=FALSE}
+halfnorm(rstudent(rlmod),6,ylab = "rlmod residuals")
+abline(h=abs(cut))
+```
+
+#### Diğer outlier değerler:
+```{r,message=FALSE,warning=FALSE}
+outlierTest(rlmod)
+```
+
+
+
+    ORNEK:
+    
+```{r}
+library(carData)
+library(faraway)
+mod<-lm(prestige~.,data=Prestige)
+summary(mod)
+```    
+type değişkeninde missing value var onları çıkarıp yeni veri oluşturduk
+
+
+İlk olarak leverage point var mı bakalım. İlk olarak önerilen yönteme göre bakalım.
+```{r}
+Prestige1<-Prestige[which(is.na(Prestige$type)=="FALSE"),]
+cutpoint<-2*sum(hatvalues(mod))/nrow(Prestige1)
+rownames(Prestige1)[which(hatvalues(mod)>cutpoint)]
+```
+
+ 
+Şimdi de half normal plot üzerinden bakalım.
+```{r}
+jobs<-rownames(Prestige1)
+halfnorm(hatvalues(mod),labs=jobs,ylab="Leverages",4)
+abline(h=cutpoint)
+```
+
+OUTLIER
+```{r,message=FALSE,warning=FALSE}
+n = nrow(Prestige1)
+library(olsrr)
+ols_test_normality(mod)
+library(faraway)
+plot(mod)
+```
+
+
+```{r}
+library(car)
+outlierTest(mod)
+```
+
+
+## Cook Distance ##
+
+```{r}
+p<-sum(hatvalues(mod))
+n<-nrow(Prestige1)
+jobs<-row.names(Prestige1)
+cook<-cooks.distance(mod)
+cutpoint<-qf(0.5,p,n-p)
+halfnorm(cook,labs=jobs,5)
+abline(h=cutpoint)
+```
+## DFBETA ##
+
+```{r}
+dfbeta<-dfbeta(mod)
+cut<-2/sqrt(n)
+which(abs(dfbeta[,2])>cut)
+```
+
+
+Test,train olarak veriyi ayırdık
+```{r}
+set.seed(124)
+n<-nrow(Prestige1)
+index<-sample(1:n,round(0.8*n))
+training<-Prestige1[index,]
+test<-Prestige1[-index,]
+lmod<-lm(prestige~.,data=training)
+```
+
+
+CV yardımı ile bütün hubber hample vs kıyasalnarak en uygun model bulundu 
+```{r,warning=FALSE}
+library(caret)
+ctrl<-trainControl(method='cv', number=10)
+X<-model.matrix(lmod)[,-1]
+y<-training$prestige
+cv.lm<-train(X, y,method='rlm',trControl=ctrl)
+print(cv.lm)
+
+```
+
+TRUE hubber kullanılacak.
+
+
+İlk olarak intercepti Huber modele bakalım.
+```{r}
+library(MASS)
+library(fpp2)
+model<-rlm(prestige~.,data=training)
+fits<-predict(model,test)
+accuracy(test$prestige,fits)
+
+```
+RMSE değeri 8.516491 çıktı
+
+Baska bir yolla bulmak istersek
+
+```{r}
+rmse<-function(true, predicted,n) {sqrt(sum((predicted - true)^2)/n)}
+rsquare <- function(true, predicted) {
+  sse <- sum((predicted - true)^2)
+  sst <- sum((true - mean(true))^2)
+  rsq <- 1 - sse / sst
+  rsq}
+
+rmse(test$prestige,fits,nrow(test))
+rsquare(test$prestige,fits)
+```
+
+
+Şimdi interceptsiz modele bakalım
+```{r}
+nointerceptmodel<-rlm(prestige~0+.,data=training)
+summary(nointerceptmodel)
+fits1 = predict(nointerceptmodel,test)
+```
+
+
+```{r}
+rmse(test$prestige, fits1,nrow(test))
+rsquare(test$prestige,fits1)
+```
+
+
+outlier kıyaslaması
+
+```{r}
+library(car)
+outlierTest(model)
+outlierTest(nointerceptmodel)
+```
+Aynı değeri buldu
+
+
+Breush pagan test
+```{r}
+library(lmtest)
+bptest(nointerceptmodel)
+```
+Değişken varyans problemi ortadan kalktı
+
+
+
+Ağırlıklara bakalım
+```{r}
+weight = data.frame(row.names(training),w = model$w , model$w) 
+sorteweight = weight[order(model$w), ]
+sorteweight
+```
+Bu modeldeki 1 in altındaki ağırlıkta olan modelleri çıkarırsak. Regresyon modellerinin tamamnın sağlayacaktır.
+
+
+
+
+
+
+      ###ORNEK
+
+
+```{r}
+library(faraway)
+gala1 = gala[,-2]
+summary(gala1)#Cin gibbi
+model = lm(Species~., data = gala1)
+```
+
+
+Outlier bakalım
+```{r}
+library(car)
+outlierTest(model)
+```
+2 tane var.
+
+
+
+```{r}
+rstud = rstudent(model)
+n = nrow(gala1)
+p = sum(hatvalues(model))
+cut = abs(qt(0.05/(2*n),n-p-1))
+halfnorm(rstud,labs =row.names(gala1) ,2)
+abline(h=cut)
+```
+
+Aynı şey çıktı
+
+Etkili gözlem var mı?(df fit)
+
+```{r}
+dffit = dffits(model)
+cutdf = 2*sqrt(p/n)
+halfnorm(dffit, labs = row.names(gala1),5)
+abline(h=cutdf)
+row.names(gala1)[which(abs(dffit) > cutdf)]
+```
+
+
+Leverage:
+```{r}
+cutlev = 2*p/n
+leverages = hatvalues(model)
+halfnorm(leverages, labs = row.names(gala1),4)
+abline(h=cutlev)
+```
+Sıra dışı gözlemleri olan bir veri
+
+
+
+```{r}
+library(olsrr)
+ols_test_normality(model) #n=30 o yüzden shapiro
+```
+Normallik varsayımı sağlanıyor gibi görünüyor.
+
+
+veriyi ayırma(test,train)
+```{r}
+set.seed(100)
+index = sample(1:n,25)
+train = gala1[index,]
+test = gala1[-index,]
+lmod = lm(Species~., train)
+```
+
+
+
+Robas regresyon(outlier olduğu için)
+
+```{r}
+library(caret)
+crtl = trainControl(method = "cv" , number = 10)
+x = model.matrix(lmod)[,-1]
+y = train$Species
+cv.lm = train(x,y,method = "rlm" , trControl = ctrl)
+print(cv.lm)
+```
+
+hample daha iyi sonuç vermiş
+
+```{r}
+library(MASS)
+huber = rlm(Species~.,train , psi = psi.huber)
+summary(huber)
+summary(lmod)
+```
+Test set üzerindeki perfomransı:
+
+```{r}
+prelm = predict(lmod,test)
+prerlm = predict(huber,test)
+library(fpp2)
+accuracy(prelm,test$Species)
+accuracy(prerlm,test$Species)
+```
+Lineer model test set üzerinde daha iyi sonuç veriyor ama elde edilen katsayılar veya anlamlılıkları güvenilir değil.
+
+
+Hubber a gore yaparsak 
+
+```{r}
+library(MASS)
+library(fpp2)
+hubmodel = rlm(Species~0+., train)
+summary(hubmodel)
+```
+```{r}
+prelm = predict(lmod,test)
+prerlm = predict(hubmodel,test)
+library(fpp2)
+accuracy(prelm,test$Species)
+accuracy(prerlm,test$Species)
+```
+
+
+
+RMSE lerine bakarsak
+
+```{r}
+rmse<-function(true, predicted,n) {sqrt(sum((predicted - true)^2)/n)}
+rsquare <- function(true, predicted) {
+  sse <- sum((predicted - true)^2)
+  sst <- sum((true - mean(true))^2)
+  rsq <- 1 - sse / sst
+  rsq}
+
+
+rmse(test$Species,prelm,nrow(test))
+rmse(test$Species,prerlm,nrow(test))
+rsquare(test$Species,prelm)
+rsquare(test$Species,prerlm)
+```
+
+
+
+```{r}
+library(car)
+outlierTest(hubmodel)
+```
+
+
+
+Tüm verilerde set üzerinde outlier incelemesi
+```{r}
+library(caret)
+crtl = trainControl(method = "cv" , number = 10)
+x = model.matrix(model)[,-1]
+y = gala1$Species
+cv.lm = train(x,y,method = "rlm" , trControl = ctrl)
+print(cv.lm)
+```
+
+```{r}
+hupmod = rlm(Species~0+., gala1 , psi = psi.hampel)
+outlierTest(hupmod)
+```
+
+```{r}
+cbind(row.names(gala1), hupmod$w)
+halfnorm(hupmod$w, labs = row.names(gala1) ,n)
+```
+
+
+
+```{r}
+rstudrlm = rstudent(hupmod)
+cut = abs(qt(alfa(2*n),n-p-1))
+halfnorm(rstudrlm, labs = row.names(gala1) ,6)
+abline(h=cut)
+```
+
+
+
+
+```{r}
+data("delivery")
+set.seed(200)
+n<-nrow(delivery)
+index<-sample(1:n,round(0.78*n))
+training<-delivery[index,]
+test<-delivery[-index,]
+lmod<-lm(delTime~.,data=training)
+nrow(test)
+```
+
+
+
+```{r}
+library(caret)
+crtl = trainControl(method = "cv" , number = 10)
+x = model.matrix(lmod)
+y = training$delTime
+cv.lm = train(x,y,method = "rlm" , trControl = crtl)
+print(cv.lm)
+```
+
+
+psi hubber
+
+
+```{r}
+hupmod = rlm(delTime~., training , psi = psi.hampel)
+outlierTest(hupmod)
+```
+
+
+
+```{r}
+prelm = predict(lmod,training)
+prerlm = predict(hupmod,training)
+library(fpp2)
+accuracy(prelm,training$delTime)
+accuracy(prerlm,training$delTime)
+```
+
+
+
+
+
+```{r}
+rmse<-function(true, predicted,n) {sqrt(sum((predicted - true)^2)/n)}
+rsquare <- function(true, predicted) {
+  sse <- sum((predicted - true)^2)
+  sst <- sum((true - mean(true))^2)
+  rsq <- 1 - sse / sst
+  rsq}
+
+
+rmse(test$Species,prelm,nrow(test))
+rmse(test$Species,prerlm,nrow(test))
+rsquare(test$Species,prelm)
+rsquare(test$Species,prerlm)
+```
+
