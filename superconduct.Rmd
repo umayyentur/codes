@@ -23,7 +23,7 @@ Yapmak istediğim model:Bir atomun kritik sıcaklığının ağırlığına hacm
 
 ```{r pressure, echo=FALSE}
 library(readxl)
-Data = read_xlsx("Documents/superconduct.xlsx")
+Data = read_excel("~/Downloads/DataSets/superconduct.xlsx")
 ```
 Verimizde kayıp gözlem (NA) değerlinin olup olmadığını inceleyerek başlıyorum.
 
