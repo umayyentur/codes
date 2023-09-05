@@ -1,0 +1,326 @@
+---
+title: "Artificial Bee Colony algorithm"
+author: "Umay Yentur"
+date : 15/06/2023
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+
+###  Yapay arı koloni algoritması 
+
+Yapay arı kolonisi (ABC) algoritması sezgi üstü sürü tabanlı bir algoritmadır. İlk olarak 2005 yılında [_Derviş karaboğ'a_](https://avesis.erciyes.edu.tr/karaboga) tarafından sayısal problemleri optimize etmek için tasarlanmıştır. Arıların doğa besin arama davranışlarından ilham alınmıştır. Model şu şekilde işler :
+Çalışan ve çalışmayan(işsiz) besin arıyan arıların besin kaynağıyla olan ilişkisi söz konusudur. İşsiz ve işçi arılar
+zengin besi kaynakları ararlar.  Besin kaynağının kovana yakınlığıda önemlidir. Model ayrıca kendi kendini organize etme ve kolektif zeka için gerekli olan başlıca iki davranış biçimini tanımlar: Olumlu geri bildirimle sonuçlanan zengin gıda kaynaklarına toplayıcıların alınması ve toplayıcılar tarafından olumsuz geri bildirime neden olan zayıf kaynakların terk edilmesi. ABC'sinde yapay toplayıcı arılardan oluşan(ajanlar) bir koloni besi kaynakları (belirli bir sorun için iyi çözümler) arar.ABC'ni uygulamak için, dikkate alınan optimizasyon problemi önce bir amaç fonksiyonunu  minimize eden, en iyi parametre vektörünü bulmak için bir probleme dönüştürülür.Daha sonra, yapay arılar rastgele bir başlangıç çözüm vektörleri popülasyonu keşfeder ve daha sonra şu stratejileri kullanarak bunları yinelemeli olarak geliştirir. kötü çözümleri terk ederken bir komşu arama mekanizması aracılığıyla daha iyi çözümlere doğru ilerlemek.
+
+#### Yapay Arı Kolonisinin Kullanıldığı Bazı Alanlar
+######  Optimizasyon Problemleri   
+Yapay arı kolonisi algoritması, karmaşık optimizasyon problemlerinin çözümünde etkili olabilir. Örneğin, tedarik zinciri yönetimi, üretim planlaması, lojistik optimizasyon ve iş sıralama gibi alanlarda kullanılabilir.
+
+###### Veri Madenciliği 
+Yapay arı kolonisi algoritması, veri madenciliği ve makine öğrenmesi problemlerinde kullanılabilir. Örneğin, kümeleme, sınıflandırma ve tahmin gibi görevlerde kullanılarak veri setlerindeki yapıyı ve ilişkileri keşfedebilir.
+
+###### Yerleşim Optimizasyonu
+Yapay arı kolonisi algoritması, şehir planlaması, kablosuz sensör ağlarının yerleşimi, iletişim ağları ve dağıtık sistemlerde yerleşim optimizasyonu gibi alanlarda kullanılabilir. Bu algoritma, en iyi yerleşim düzenini bulmak için kullanılabilecek etkili bir araç olabilir.
+
+
+###### Yol Bulma Problemleri
+Yapay arı kolonisi algoritması, seyahat satışmanı problemi, rotalama problemleri ve lojistikte en kısa yol bulma gibi problemlerde kullanılabilir. Bu algoritma, en iyi yol veya rota kombinasyonlarını bulmak için uygulanabilir.
+
+###### Dağıtık Problemler
+Yapay arı kolonisi algoritması, dağıtık hesaplama ve problem çözme senaryolarında kullanılabilir. Örneğin, çoklu robot kontrolü, veri merkezi yönetimi ve kablosuz sensör ağlarında kaynak tahsisi gibi alanlarda kullanılabilir.
+
+Bunlar sadece birkaç örnektir, yapay arı kolonisi algoritması farklı alanlarda çeşitli problemlerin çözümünde kullanılabilir. Her bir uygulama için, algoritmanın parametreleri ve yapılandırması problem gereksinimlerine ve hedeflere göre ayarlanmalıdır.
+
+
+
+
+
+
+#### Arılar
+
+##### İşçi Arılar
+
+Algoritmada bu arıların amacı belleğindeki besin kaynağının $\vec{x_{m}}$ yakınında daha fazla balözü bulunan yeni besin kaynakları ararlar $\vec{v_{m}}$ ve ardından bu besi kaynağının yuva için uygunluğunu(kâr-zarar) değerlendirirler. Denklemndeki formülü kullanırsak:
+
+
+(i)
+$$   v_{mi} = x_{mi} + \varphi_{mi}(x_{mi}- x_{ki})$$
+
+
+
+Burada $\vec{x_{k}}$ rasgele seçilmiş bir besin kaynağı, $\varphi_{mi}$ rasgele seçilmiş bir parametre indeksi ve $\varphi_{mi}$ [−a,a] aralığında rasgele bir sayıdır. Yeni besin kaynağı $\vec{v_{m}}$ üretildikten sonra uygunluğu hesaplanır ve $\vec{v_{m}}$ ile $\vec{x_{m}}$ arasında açgözlü bir seçim uygulanır. 
+Çözümün uygunluk değeri $fit_{m}(\vec{x_{m}})$ minimizasyon problemleri için aşağıdaki formül kullanılarak hesaplanabilir:
+
+(ii)
+
+$$
+fit_{m}(\vec{x_{m}}) = \begin{cases}  \frac{1}{1+f_{m}(\vec{x_{m})}}  \ if\ f_{m}(\vec{x_{m}}\ge 0) ,\\ 1+abs(f_{m(\vec{x_{m}})}) \ if \ f_{m}(\vec{x_{m}}) < 0  \  \end{cases}
+$$
+
+burada $f_{m}(\vec{x_{m})}$, $\vec{x_{m}}$ çözümünün amaç fonksiyon değeridir.
+
+
+
+
+##### Gözcü Arılar
+
+İşsiz arılar Kaşif arılar ve gözcü arılar olmak üzere ikiye ayrılır. Görevli arılar besin kaynağı bilgilerini kovanda bekleyen gözcü arılarla paylaşırlar ve daha sonra gözcü arılar bu bilgilere göre yiyecek kaynaklarını olasılıksal olarak seçerler. YAK'de bir gözcü arı, görevli arılar tarafından sağlanan uygunluk değerleri kullanılarak hesaplanan olasılık değerlerine bağlı olarak bir besin kaynağı seçer. Bu amaçla, rulet çarkı seçim yöntemi gibi uygunluk temelli bir seçim tekniği kullanılabilir.Gözcü arı tarafından $\vec{x_{m}}$'nin seçildiği olasılık değeri $p_{m}$, denklemde verilen ifade kullanılarak hesaplanabilir.
+
+(iii)
+$$p_{m} = \frac {fit_{m}(\vec{x_{m})}} {\sum_{m=1}^{SN} fit_{m}(\vec{x_{m}})}$$
+
+
+Bir gözcü arı için besin kaynağı $\vec{x_{m}}$ olasılıksal olarak seçildikten sonra, denklem kullanılarak bir komşu kaynak $\vec{v_{m}}$ belirlenir ve uygunluk değeri hesaplanır. İşçi arı aşamasında olduğu gibi $\vec{v_{m}}$ ile $\vec{x_{m}}$ arasında "obur" bir seçim uygulanır. Böylece, daha zengin kaynaklara daha fazla izleyici çekilir ve olumlu bir geri bildirim ortaya çıkar.
+
+
+
+##### Kaşif Arılar
+
+İşsiz arılar sınıfında olup , yemek kanaklarını rastgele bir şekilde arıyan arılara Kaşif Arılar(Scout bees) denir.
+ABC algoritmasının kullanıcısı tarafından belirlenen ve burada “limit” veya “terk etme kriteri” olarak adlandırılan önceden belirlenmiş sayıda deneme ile çözümleri iyileştirilemeyen işçi arılar kaşif olur ve çözümleri terk edilir. Ardından, dönüştürülen izciler rastgele yeni çözümler aramaya başlar. Örneğin, $\vec{x_{m}}$ çözümü terk edilmişse, $\vec{x_{m}}$'nin görevli arısı olan izci tarafından bulunan yeni çözüm (iv) ile tanımlanabilir. Bu nedenle, başlangıçta zayıf olan veya sömürü yoluyla zayıf hale getirilen kaynaklar terk edilir ve olumlu geri bildirimi dengelemek için olumsuz geri bildirim davranışı ortaya çıkar.
+
+### Kovanın işleyişi 
+
+Besin kaynaklarının popülasyonunun tüm vektörleri, $\vec{x_{m}}$ 'ler , kâşif arılar tarafından başlatılır (m=1...SN , SN: popülasyon büyüklüğü) ve kontrol parametreleri ayarlanır. Her besin kaynağı, $\vec{x_{m}}$, optimizasyon probleminin bir çözüm vektörü olduğundan, her $\vec{x_{m}}$ vektörü, amaç fonksiyonunu en aza indirmek için optimize edilecek n değişkeni (${x_{mi}}$,i=1...n) tutar.İşlemi başlatmak için :
+
+(iv)
+$${x_{mi}} = l_{i}+ rand(0,1) *(u_{i} - l_{i}) $$
+
+burada $l_{i}$ ve $u_{i}$ sırasıyla ${x_{mi}}$ 'nin alt ve üst sınırıdır.
+
+
+
+Kaşif arılar rastgele yada bir ipucu üzerine kovan dışına çıkıp arama yaparlar.(S). Belirli bir alanda "Dans" tenikleriyle belirli bir bölgeden besin ararlar(R)
+
+![Arıların besin bulmak için yaptıkları haraketler](Vızvızvız.png)
+
+Besin kaynağı bulunduktan sonra, Besiyi bulduğu yeri belleğine kaydeder ve hemen besinin olduğu alanı taramaya başlar.(görselde görüldüğü gibi dairesel haraketlerle bu durum gerçekleştirilir.)Bu andan itibaren "İşçi arı" ya dönüşür diyebiliriz. Etrafı taradıktan sınra besin kaynağından alabileceği kadar büyük bir parça alıp kovana geri döner.Kovana depoladıktan sonra arının 3 seçeneği vardır: 
+
+
+i. Besi kaynağını terk ettikten sonra "taahhütsüz takipçi" olabilir. (UF)
+
+ii. Daha fazla arı ile tekrardan besi kaynağına gidip besin depolamaya devam edebilir. (EF1)
+
+iii. Kendi başına(diğer arılara haber vermeden "işe almadan") besinin çevresini aramaya devam edebilir(EF2)
+
+Tüm arılar aynı anda besin aramazlar. Bu sayede aşırı verimli bir düzenleri vardır. Bu metodun birden çok faydası vardır. Verimlilik ve hızlı çözümde bunlardan bağzılarıdır.
+
+
+
+
+
+
+
+
+#### Özetle Yapay Arı Kolonisi Algoritması
+
+$\iota.$ Bal arılarının yiyecek arama davramışlarından esinlenilmiştir.
+
+$\iota\iota.$ Toplu bir optimizasyon algoritmasıdır.
+
+$\iota\iota\iota.$ Başlangıçta sayısal optimizasyonlar için tasarlansa da. Birleşimsel optimizasyon problemleri , kısıtlanmamış ve kısıtlanmış optimizasyon problemleri için de kullanılabilir.
+
+
+
+
+### Yapay Arı Kolonisi Algoritması
+
+#### Rosenbrock fonksiyonunun ABC yöntemi ile en iyi modeli bulma 
+
+
+```{r}
+# Bir çözümün uygunluğunu değerlendirme işlevi
+evaluate_fitness <- function(solution) {
+  # Example problem: Rosenbrock function
+  x <- solution[1]
+  y <- solution[2]
+  
+  fitness <- (1 - x)^2 + 100 * (y - x^2)^2
+  return(fitness)
+}
+
+#1.Aşama (Popülasyonu baslatan fonksiyon)
+initialize_population <- function(n, lower_limits, upper_limits) {
+  population <- matrix(NA, nrow = n, ncol = length(lower_limits))
+  
+  for (i in 1:n) {
+    # Initialize each parameter within the specified limits
+    population[i, ] <- runif(length(lower_limits), lower_limits, upper_limits)
+  }
+  
+  return(population)
+}
+
+#2.asama işçi arıların görevleri
+employed_bee_phase <- function(population, fitness) {
+  n <- nrow(population)
+  dimension <- ncol(population)
+  
+  for (i in 1:n) {
+    
+    j <- sample((1:n)[-i], 1)
+    
+    
+    k <- sample(1:dimension, 1)
+    new_solution <- population[i, ]
+    new_solution[k] <- population[i, k] + runif(1, -1, 1) * (population[i, k] - population[j, k])
+    
+    
+    new_fitness <- evaluate_fitness(new_solution)
+    
+    
+    if (new_fitness < fitness[i]) {
+      population[i, ] <- new_solution
+      fitness[i] <- new_fitness
+    }
+  }
+  
+  return(list(population = population, fitness = fitness))
+}
+
+#3.asama gozcu arilar
+onlooker_bee_phase <- function(population, fitness) {
+  n <- nrow(population)
+  dimension <- ncol(population)
+  probabilities <- 1 / fitness
+  probabilities <- probabilities / sum(probabilities)
+  
+  for (i in 1:n) {
+    
+    selected <- sample(1:n, 1, prob = probabilities)
+    
+    
+    j <- sample((1:n)[-selected], 1)
+    
+    
+    k <- sample(1:dimension, 1)
+    new_solution <- population[selected, ]
+    new_solution[k] <- population[selected, k] + runif(1, -1, 1) * (population[selected, k] - population[j, k])
+    
+    
+    new_fitness <- evaluate_fitness(new_solution)
+    
+    
+    if (new_fitness < fitness[selected]) {
+      population[selected, ] <- new_solution
+      fitness[selected] <- new_fitness
+    }
+  }
+  
+  return(list(population = population, fitness = fitness))
+}
+
+#4.asama kasif arilar
+scout_bee_phase <- function(population, fitness, max_trials, lower_limits, upper_limits) {
+  n <- nrow(population)
+  dimension <- ncol(population)
+  
+  for (i in 1:n) {
+    if (fitness[i] > max(fitness)) {
+      
+      population[i, ] <- runif(dimension, lower_limits, upper_limits)
+      fitness[i] <- evaluate_fitness(population[i, ])
+    }
+  }
+  
+  return(list(population = population, fitness = fitness))
+}
+
+#5.asama ABC algoritmasi
+abc_algorithm <- function(n, max_iterations, max_trials, lower_limits, upper_limits) {
+  dimension <- length(lower_limits)
+  
+  
+  population <- initialize_population(n, lower_limits, upper_limits)
+  fitness <- apply(population, 1, evaluate_fitness)
+  
+  
+  best_solution <- population[which.min(fitness), ]
+  best_fitness <- min(fitness)
+  
+  
+  for (iteration in 1:max_iterations) {
+    
+    population_fitness <- employed_bee_phase(population, fitness)
+    population <- population_fitness$population
+    fitness <- population_fitness$fitness
+    
+    
+    population_fitness <- onlooker_bee_phase(population, fitness)
+    population <- population_fitness$population
+    fitness <- population_fitness$fitness
+    
+    
+    population_fitness <- scout_bee_phase(population, fitness, max_trials, lower_limits, upper_limits)
+    population <- population_fitness$population
+    fitness <- population_fitness$fitness
+    
+    
+    current_best_solution <- population[which.min(fitness), ]
+    current_best_fitness <- min(fitness)
+    
+    
+    if (current_best_fitness < best_fitness) {
+      best_solution <- current_best_solution
+      best_fitness <- current_best_fitness
+    }
+    
+    
+    cat("Iteration:", iteration, "Best Fitness:", best_fitness, "\n")
+  }
+  
+  return(list(solution = best_solution, fitness = best_fitness))
+}
+
+
+n <- 50  
+max_iterations <- 100  
+max_trials <- 10  
+lower_limits <- c(-5, -5)  
+upper_limits <- c(5, 5)  
+
+
+result <- abc_algorithm(n, max_iterations, max_trials, lower_limits, upper_limits)
+
+
+cat("Best Solution:", result$solution, "\n")
+cat("Best Fitness:", result$fitness, "\n")
+```
+
+
+
+
+### Kaynakça
+
+[“A Comparative Study of Artificial Bee Colony Algorithm”. Applied Mathematics and Computation, c. 214, sy 1, Ağustos 2009, ss. 108-32.](https://www.sciencedirect.com/science/article/abs/pii/S0096300309002860)
+
+[“A Global Best Artificial Bee Colony Algorithm for Global Optimization”. Journal of Computational and Applied Mathematics, c. 236, sy 11, Mayıs 2012, ss. 2741-53.](https://www.sciencedirect.com/science/article/pii/S0377042712000246)
+
+[Karaboga, Dervis. “Artificial Bee Colony Algorithm”. Scholarpedia, c. 5, sy 3, Mart 2010, s. 6915. www.scholarpedia.org](http://www.scholarpedia.org/article/Artificial_bee_colony_algorithm)
+
+[Yapay Arı Kolonisi Algoritması Kullanarak Otomatik Ders Çizelgeleme,Süleyman Demirel Üniversitesi](https://dergipark.org.tr/tr/download/article-file/193945#:~:text=S%C3%BCr%C3%BC%20zekas%C4%B1na%20dayanan%20bu%20algoritma,optimizasyon%20problemlerini%20%C3%A7%C3%B6zmek%20i%C3%A7in%20kullan%C4%B1lmaktad%C4%B1r.)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
